@@ -31,7 +31,8 @@ export function infinitePay(cfg: InfinitePayConfig): Gateway {
         return { tipo: 'invalido', detalhe: 'payload sem order_nsu/transaction_nsu', payload: body }
       }
 
-      const res = await fetch('https://api.infinitepay.io/invoices/public/checkout/payment_check', {
+      // URL nova do Checkout Integrado (a antiga api.infinitepay.io/invoices/... será desativada)
+      const res = await fetch('https://api.checkout.infinitepay.io/payment_check', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
