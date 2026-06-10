@@ -81,6 +81,10 @@ telegram({
 })
 ```
 
+## 💼 Instalação profissional
+
+Quer isso funcionando no seu projeto sem dor de cabeça? Eu instalo, configuro e testo no seu gateway e banco — fale comigo no [WhatsApp](https://wa.me/5527996240725).
+
 ## Licença
 
 [MIT](LICENSE) — use, modifique e venda à vontade.
