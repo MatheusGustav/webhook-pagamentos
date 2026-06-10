@@ -30,6 +30,38 @@ export interface Gateway {
   verificar(req: Request): Promise<Verificacao>
 }
 
+// ----------------------------------------------------------------
+// Checkout — criar a cobrança (o outro lado do ciclo)
+// ----------------------------------------------------------------
+
+export interface ItemCheckout {
+  nome: string
+  /** Preço unitário em centavos (ex: R$ 150,00 = 15000). */
+  precoCentavos: number
+  quantidade?: number
+}
+
+export interface PedidoCheckout {
+  /** Identificador único do pedido — o MESMO que o webhook recebe depois
+   * (order_nsu na InfinitePay, external_reference no Mercado Pago). */
+  chave: string
+  itens: ItemCheckout[]
+  /** Pré-preenche a página de pagamento (cliente digita menos). */
+  cliente?: { nome?: string; email?: string; telefone?: string }
+  /** Restringe a forma de pagamento, se o gateway suportar (ex: 'pix' | 'cartao'). */
+  metodo?: string
+}
+
+/** Adaptador de checkout: monta a cobrança e devolve a URL de pagamento. */
+export interface CheckoutGateway {
+  nome: string
+  criarLink(pedido: PedidoCheckout): Promise<string>
+}
+
+// ----------------------------------------------------------------
+// Webhook — confirmar o pagamento
+// ----------------------------------------------------------------
+
 /** Pedido como o core precisa enxergar — só o essencial. */
 export interface Pedido {
   /** Valor esperado em reais (ex: 150.5). */

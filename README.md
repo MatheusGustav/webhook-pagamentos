@@ -1,11 +1,15 @@
 # webhook-pagamentos
 
-Webhook de pagamento universal em TypeScript (Deno) — recebe o aviso do gateway, **confirma se pagou de verdade**, marca o pedido como pago **uma vez só** e avisa no Telegram. Extraído de código rodando em produção.
+Integração de pagamento completa em TypeScript (Deno) — **cria a cobrança** e **confirma o pagamento com segurança**, nos dois gateways. Extraído de código rodando em produção.
 
 ```
-aviso do gateway ──► verifica na API do gateway ──► confirma o pedido ──► 🔔 Telegram
-                     (nunca confia só no aviso)      (idempotente)
+checkout: seu site ──► criarLink(pedido) ──► URL de pagamento ──► cliente paga
+                                                                      │
+webhook:  aviso do gateway ──► verifica na API ──► confirma o pedido ──► 🔔 Telegram
+                               (nunca confia só no aviso)  (idempotente)
 ```
+
+A mesma `chave` identifica o pedido nas duas pontas (`order_nsu` / `external_reference`) — é ela que fecha o ciclo.
 
 ## Por que isso existe
 
@@ -20,11 +24,11 @@ Webhook de pagamento parece simples até você sofrer na prática:
 
 ## Gateways
 
-| Gateway | Status |
-|---|---|
-| InfinitePay | ✅ testado em produção |
-| Mercado Pago | ✅ testado |
-| Stripe, PagBank, Asaas, Efí... | contribua! É 1 arquivo (veja abaixo) |
+| Gateway | Checkout (criar link) | Webhook (confirmar) |
+|---|---|---|
+| InfinitePay | ✅ testado em produção | ✅ testado em produção |
+| Mercado Pago | ✅ Checkout Pro | ✅ testado |
+| Stripe, PagBank, Asaas, Efí... | contribua! | É 1 arquivo (veja abaixo) |
 
 ## Começando (Supabase, ~10 minutos)
 
@@ -45,25 +49,40 @@ Seu sistema só precisa fazer duas coisas: criar o registro em `pedidos` (com `c
 
 ```
 core/
-  types.ts        ← interfaces (Gateway, Storage, Notificador)
-  webhook.ts      ← o cérebro: idempotência, valor, log, respostas HTTP
+  types.ts        ← interfaces (Gateway, CheckoutGateway, Storage, Notificador)
+  webhook.ts      ← confirma: idempotência, valor, log, respostas HTTP
+  checkout.ts     ← cria: valida o pedido e devolve a URL de pagamento
 gateways/
-  infinitepay.ts  ← traduz o aviso da InfinitePay (payment_check)
-  mercadopago.ts  ← traduz o aviso do MP (x-signature + /v1/payments)
+  infinitepay.ts  ← cria link (/links) + confirma (payment_check)
+  mercadopago.ts  ← cria link (Checkout Pro) + confirma (x-signature + /v1/payments)
 storage/
   supabase.ts     ← as 3 funções que tocam o banco
   schema.sql
 notificadores/
   telegram.ts
 exemplos/
-  supabase-edge-function/
+  supabase-edge-function/           ← webhook
+  supabase-edge-function-checkout/  ← checkout
 ```
 
 O core não conhece nenhum gateway nem banco. Toda a "tradução" vive nos adaptadores.
 
+### Criar a cobrança (checkout)
+
+```ts
+const handler = criarCheckout({
+  gateway: infinitePayCheckout({ handle, webhookUrl }), // ou mercadoPagoCheckout({...})
+})
+// POST { chave, itens: [{ nome, precoCentavos }], cliente? } → { url }
+```
+
+Crie o registro em `pedidos` (com a mesma `chave` e o `valor_total`) **antes** de gerar o link — é ele que o webhook valida na volta.
+
 ### Adicionar um gateway
 
-Um arquivo que implementa `Gateway` (`core/types.ts`): interprete o aviso, **confirme o pagamento na API do gateway** e retorne `{ tipo: 'pago', chave, valorCentavos, metodo }` (ou `nao_pago`/`ignorar`/`invalido`/`erro`). Use `gateways/infinitepay.ts` como modelo — são ~60 linhas.
+Webhook: um arquivo que implementa `Gateway` (`core/types.ts`): interprete o aviso, **confirme o pagamento na API do gateway** e retorne `{ tipo: 'pago', chave, valorCentavos, metodo }` (ou `nao_pago`/`ignorar`/`invalido`/`erro`). Use `gateways/infinitepay.ts` como modelo — são ~60 linhas.
+
+Checkout: implemente `CheckoutGateway` — uma função `criarLink(pedido)` que chama a API do gateway e retorna a URL de pagamento (~40 linhas).
 
 ### Usar outro banco de dados
 

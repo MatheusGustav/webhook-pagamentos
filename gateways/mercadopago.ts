@@ -8,13 +8,66 @@
 // Assinatura: se webhookSecret for configurado, valida o header
 // x-signature (HMAC-SHA256 do manifest id/request-id/ts), conforme
 // https://www.mercadopago.com.br/developers/pt/docs/your-integrations/notifications/webhooks
-import type { Gateway, Verificacao } from '../core/types.ts'
+import type { CheckoutGateway, Gateway, PedidoCheckout, Verificacao } from '../core/types.ts'
 
 export interface MercadoPagoConfig {
   /** Access token (produção ou sandbox). */
   accessToken: string
   /** Assinatura secreta do webhook (recomendado; sem ela a validação é pulada). */
   webhookSecret?: string
+}
+
+export interface MercadoPagoCheckoutConfig {
+  accessToken: string
+  /** Para onde o cliente volta depois de pagar. */
+  urlRetorno?: string
+  /** URL do SEU webhook — o MP notifica nela quando o pagamento confirmar. */
+  notificationUrl?: string
+}
+
+/** Cria links de pagamento via Checkout Pro (preference → init_point). */
+export function mercadoPagoCheckout(cfg: MercadoPagoCheckoutConfig): CheckoutGateway {
+  return {
+    nome: 'mercadopago',
+
+    async criarLink(pedido: PedidoCheckout): Promise<string> {
+      const payload: Record<string, unknown> = {
+        external_reference: pedido.chave,
+        items: pedido.itens.map((i) => ({
+          title: i.nome,
+          quantity: i.quantidade ?? 1,
+          currency_id: 'BRL',
+          unit_price: i.precoCentavos / 100, // MP trabalha em reais
+        })),
+        ...(cfg.notificationUrl && { notification_url: cfg.notificationUrl }),
+        ...(cfg.urlRetorno && {
+          back_urls: { success: cfg.urlRetorno, pending: cfg.urlRetorno, failure: cfg.urlRetorno },
+          auto_return: 'approved',
+        }),
+        ...(pedido.cliente && {
+          payer: {
+            ...(pedido.cliente.nome && { name: pedido.cliente.nome }),
+            ...(pedido.cliente.email && { email: pedido.cliente.email }),
+          },
+        }),
+      }
+
+      const res = await fetch('https://api.mercadopago.com/checkout/preferences', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${cfg.accessToken}`,
+          'X-Idempotency-Key': `checkout-${pedido.chave}`,
+        },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(`MP /checkout/preferences HTTP ${res.status}: ${JSON.stringify(data)}`)
+
+      if (!data.init_point) throw new Error(`MP não retornou init_point: ${JSON.stringify(data)}`)
+      return data.init_point
+    },
+  }
 }
 
 async function assinaturaValida(req: Request, dataId: string, secret: string): Promise<boolean> {
