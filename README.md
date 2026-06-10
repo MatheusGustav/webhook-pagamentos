@@ -23,7 +23,7 @@ Webhook de pagamento parece simples até você sofrer na prática:
 | Gateway | Status |
 |---|---|
 | InfinitePay | ✅ testado em produção |
-| Mercado Pago | ✅ portado de código de produção (valide no sandbox antes de usar) |
+| Mercado Pago | ✅ testado |
 | Stripe, PagBank, Asaas, Efí... | contribua! É 1 arquivo (veja abaixo) |
 
 ## Começando (Supabase, ~10 minutos)
